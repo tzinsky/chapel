@@ -11,7 +11,7 @@
 // Use standard modules for Bit operations, Random numbers, Timing, and
 // Block and Cyclic distributions
 //
-use BitOps, Random, Time, BlockDist, CyclicDist;
+use BitOps, Math, Random, Time, BlockDist, CyclicDist;
 
 use VisualDebug;
 
@@ -212,7 +212,7 @@ proc dfft(A: [?ADom], W, cyclicPhase) {
 // wk2, and wk3 and a 4-element array (slice) A.
 //
 proc butterfly(wk1, wk2, wk3, X:[?D]) {
-  const i0 = D.low,
+  const i0 = D.lowBound,
         i1 = i0 + D.stride,
         i2 = i1 + D.stride,
         i3 = i2 + D.stride;

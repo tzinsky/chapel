@@ -16,12 +16,10 @@ default:
 .. toctree::
    :maxdepth: 1
 
-   Chapel Environment Variables <standard/ChapelEnv>
+   AutoMath <standard/AutoMath>
    Errors <standard/Errors>
    IO Support <standard/ChapelIO>
-   Math <standard/Math>
    Types <standard/Types>
-   VectorizingIterator <standard/VectorizingIterator>
 
 
 Data Structures
@@ -73,6 +71,7 @@ Math/Numerical
 .. toctree::
    :maxdepth: 1
 
+   AutoMath <standard/AutoMath>
    BigInteger <standard/BigInteger>
    BitOps <standard/BitOps>
    GMP <standard/GMP>
@@ -96,14 +95,12 @@ System/Interoperability
 .. toctree::
    :maxdepth: 1
 
-   CPtr <standard/CPtr>
    CTypes <standard/CTypes>
    OS <standard/OS>
    Spawn <standard/Spawn>
    Subprocess <standard/Subprocess>
    Sys <standard/Sys>
    SysBasic <standard/SysBasic>
-   SysCTypes <standard/SysCTypes>
    SysError <standard/SysError>
 
 Utilities

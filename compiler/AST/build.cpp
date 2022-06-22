@@ -1260,8 +1260,6 @@ BlockStmt* buildCoforallLoopStmt(Expr* indices,
   checkIndices(indices);
   if (zippered) zipToTuple(iterator);
 
-  SET_LINENO(body);
-
   VarSymbol* tmpIter = newTemp("tmpIter");
   tmpIter->addFlag(FLAG_EXPR_TEMP);
   tmpIter->addFlag(FLAG_MAYBE_REF);
@@ -1845,12 +1843,8 @@ FnSymbol* buildLambda(FnSymbol *fn) {
   return fn;
 }
 
-BlockStmt* buildExternExportFunctionDecl(Flag externOrExport, Expr* paramCNameExpr, BlockStmt* blockFnDef) {
-  DefExpr* def = toDefExpr(blockFnDef->body.tail);
-  INT_ASSERT(def);
-  FnSymbol* fn = toFnSymbol(def->sym);
-  INT_ASSERT(fn);
-
+void setupExternExportFunctionDecl(Flag externOrExport, Expr* paramCNameExpr,
+                                   FnSymbol* fn) {
   const char* cname = "";
   // Look for a string literal we can use
   if (paramCNameExpr != NULL) {
@@ -1890,6 +1884,15 @@ BlockStmt* buildExternExportFunctionDecl(Flag externOrExport, Expr* paramCNameEx
                                       paramCNameExpr, NULL);
     fn->insertFormalAtTail(argDef);
   }
+}
+
+BlockStmt* buildExternExportFunctionDecl(Flag externOrExport, Expr* paramCNameExpr, BlockStmt* blockFnDef) {
+  DefExpr* def = toDefExpr(blockFnDef->body.tail);
+  INT_ASSERT(def);
+  FnSymbol* fn = toFnSymbol(def->sym);
+  INT_ASSERT(fn);
+
+  setupExternExportFunctionDecl(externOrExport, paramCNameExpr, fn);
 
   return blockFnDef;
 }
@@ -1933,8 +1936,8 @@ buildFunctionSymbol(FnSymbol*   fn,
   return fn;
 }
 
-BlockStmt*
-buildFunctionDecl(FnSymbol*   fn,
+void
+setupFunctionDecl(FnSymbol*   fn,
                   RetTag      optRetTag,
                   Expr*       optRetType,
                   bool        optThrowsError,
@@ -1981,7 +1984,20 @@ buildFunctionDecl(FnSymbol*   fn,
   }
 
   fn->doc = docs;
+}
 
+BlockStmt*
+buildFunctionDecl(FnSymbol*   fn,
+                  RetTag      optRetTag,
+                  Expr*       optRetType,
+                  bool        optThrowsError,
+                  Expr*       optWhere,
+                  Expr*       optLifetimeConstraints,
+                  BlockStmt*  optFnBody,
+                  const char* docs)
+{
+  setupFunctionDecl(fn, optRetTag, optRetType, optThrowsError,
+                    optWhere, optLifetimeConstraints, optFnBody, docs);
   return buildChapelStmt(new DefExpr(fn));
 }
 
@@ -2615,6 +2631,15 @@ BlockStmt* convertTypesToExtern(BlockStmt* blk, const char* cname) {
         TypeSymbol* ts = new TypeSymbol(vs->name, pt);
         if (VarSymbol* theVs = toVarSymbol(vs)) {
           ts->doc = theVs->doc;
+
+          // TODO: Loop/copy all flags here instead of two?
+          if (theVs->hasFlag(FLAG_PRIVATE)) ts->addFlag(FLAG_PRIVATE);
+          if (theVs->hasFlag(FLAG_C_MEMORY_ORDER_TYPE)) ts->addFlag(FLAG_C_MEMORY_ORDER_TYPE);
+          if (theVs->hasFlag(FLAG_NO_DOC)) ts->addFlag(FLAG_NO_DOC);
+          if (theVs->hasFlag(FLAG_DEPRECATED)) {
+            ts->addFlag(FLAG_DEPRECATED);
+            ts->deprecationMsg = theVs->deprecationMsg;
+          }
         }
         DefExpr* newde = new DefExpr(ts);
 

@@ -21,9 +21,7 @@ def llvm_versions():
 def get_uniq_cfg_path_for(llvm_val):
     if llvm_val == "bundled":
         # put platform-arch-compiler for included llvm
-        host_bin_subdir = chpl_bin_subdir.get('host')
-        host_compiler = chpl_compiler.get('host')
-        llvm_target_dir = '{0}-{1}'.format(host_bin_subdir, host_compiler)
+        llvm_target_dir = chpl_bin_subdir.get('host')
     else:
         # just put 'system' for system llvm
         llvm_target_dir = llvm_val
@@ -69,12 +67,10 @@ def check_llvm_config(llvm_config):
 
     got_version = 0
     version_ok = False
-    llvm_header = ''
-    llvm_include_ok = False
-    clang_header = ''
-    clang_include_ok = False
+
     exists, returncode, my_stdout, my_stderr = try_run_command([llvm_config,
                                                                 '--version'])
+    s = ''
     if exists and returncode == 0:
         version_string = my_stdout.strip()
         got_version = version_string.split('.')[0]
@@ -83,30 +79,77 @@ def check_llvm_config(llvm_config):
         s = "could not run llvm-config at {0}".format(llvm_config)
         return (0, s)
 
+    if not version_ok:
+        s = ("LLVM version {0} is not one of the supported versions: {1}"
+             .format(got_version, llvm_versions_string()))
+
+    return (got_version, s)
+
+# Ensure that relevant LLVM-related header files and libraries have been
+# installed. If these are missing it usually indicates the user failed to
+# install some necessary package.
+def check_llvm_packages(llvm_config):
+    llvm_header = ''
+    llvm_include_ok = False
+    clang_header = ''
+    clang_include_ok = False
+    clang_cpp_lib = ''
+    clang_cpp_lib_ok = False
+
+    usr_include_clang_ok = False
+
     include_dir = run_command([llvm_config, '--includedir']).strip()
     if os.path.isdir(include_dir):
         llvm_header = os.path.join(include_dir,
                                    'llvm', 'Config', 'llvm-config.h')
         llvm_include_ok = os.path.exists(llvm_header)
+
         clang_header = os.path.join(include_dir, 'clang', 'Basic', 'Version.h')
         clang_include_ok = os.path.exists(clang_header)
+        if not clang_include_ok:
+            usr_include = "/usr/include"
+            clang_header2 = os.path.join(usr_include, 'clang', 'Basic', 'Version.h')
+            ver_inc = os.path.join(usr_include, 'clang', 'Basic', 'Version.inc')
+            if os.path.exists(clang_header2) and os.path.exists(ver_inc):
+
+                llvm_version, ignored_err = check_llvm_config(llvm_config)
+                llvm_version = llvm_version.strip()
+                with open(ver_inc) as f:
+                    contents = f.read()
+                    if llvm_version in contents:
+                        usr_include_clang_ok = True
+                        clang_include_ok = True;
+
+    llvm_lib_dir = run_command([llvm_config, '--libdir']).strip()
+
+    clang_lib_name = None
+    if sys.platform == "darwin":
+        clang_lib_name = 'libclang-cpp.dylib'
+    elif sys.platform == "win32":
+        clang_lib_name = 'libclang-cpp.dll'
+    else:
+        clang_lib_name = 'libclang-cpp.so'
+
+    if os.path.isdir(llvm_lib_dir):
+        clang_cpp_lib = os.path.join(llvm_lib_dir, clang_lib_name);
+        clang_cpp_lib_ok = os.path.exists(clang_cpp_lib)
+        if usr_include_clang_ok and not clang_cpp_lib_ok:
+            # use e.g. /usr/lib/libclang-cpp.so
+            clang_cpp_lib = os.path.join("/usr/lib", clang_lib_name);
+            clang_cpp_lib_ok = os.path.exists(clang_cpp_lib)
 
     s = ''
-    if not version_ok:
-        s = ("LLVM version {0} is not one of the supported versions: {1}"
-             .format(got_version, llvm_versions_string()))
-        return (got_version, s)
-
     if not llvm_include_ok:
         s = "Could not find the LLVM header {0}".format(llvm_header)
         s += "\nPerhaps you need to install clang and llvm dev packages"
-        return (got_version, s)
     elif not clang_include_ok:
         s = "Could not find the clang header {0}".format(clang_header)
         s += "\nPerhaps you need to install clang and llvm dev packages"
-        return (got_version, s)
+    elif not clang_cpp_lib_ok:
+        s = "Could not find the clang library {0}".format(clang_cpp_lib)
+        s += "\nPerhaps you need to install the libclang-cpp-dev package"
 
-    return (got_version, '')
+    return (s == '', s)
 
 
 @memoize
@@ -171,6 +214,11 @@ def get_llvm_config():
     return llvm_config
 
 @memoize
+def get_llvm_version():
+    (llvm_version, _) = check_llvm_config(get_llvm_config())
+    return llvm_version
+
+@memoize
 def validate_llvm_config():
     llvm_val = get()
     llvm_config = get_llvm_config()
@@ -189,18 +237,20 @@ def validate_llvm_config():
                   .format(llvm_config, config_error))
 
     if llvm_val == 'system':
-        bindir = get_system_llvm_config_bindir()
-        if not (bindir and os.path.isdir(bindir)):
-            error("llvm-config command {0} provides missing bin dir {1}"
-                  .format(llvm_config, bindir))
-        clang_c = get_llvm_clang('c')[0]
-        clang_cxx = get_llvm_clang('c++')[0]
-        if not os.path.exists(clang_c):
-            error("Missing clang command at {0}".format(clang_c))
-        if not os.path.exists(clang_cxx):
-            error("Missing clang++ command at {0}".format(clang_cxx))
+      bindir = get_system_llvm_config_bindir()
+      if not (bindir and os.path.isdir(bindir)):
+          error("llvm-config command {0} provides missing bin dir {1}"
+                .format(llvm_config, bindir))
+      clang_c = get_llvm_clang('c')[0]
+      clang_cxx = get_llvm_clang('c++')[0]
+      if not os.path.exists(clang_c):
+          error("Missing clang command at {0}".format(clang_c))
+      if not os.path.exists(clang_cxx):
+          error("Missing clang++ command at {0}".format(clang_cxx))
 
-
+      (noPackageErrors, package_err) = check_llvm_packages(llvm_config)
+      if not noPackageErrors:
+        error(package_err)
 
 @memoize
 def get_system_llvm_config_bindir():
@@ -225,12 +275,27 @@ def get_llvm_clang_command_name(lang):
     else:
         return 'clang'
 
+@memoize
 def get_system_llvm_clang(lang):
     clang_name = get_llvm_clang_command_name(lang)
     bindir = get_system_llvm_config_bindir()
     clang = ''
     if bindir:
         clang = os.path.join(bindir, clang_name)
+
+        if not os.path.exists(clang):
+            # also try /usr/bin/clang since some OSes use that
+            # for the clang package
+            usr_bin = "/usr/bin"
+            clang2 = os.path.join(usr_bin, clang_name);
+            if os.path.exists(clang2):
+                llvm_config = find_system_llvm_config()
+                # check that clang --version matches llvm-config --version
+                clangv = run_command([clang2, '--version']).strip()
+                llvmv = run_command([llvm_config, '--version']).strip()
+
+                if llvmv in clangv:
+                    clang = clang2
 
     return clang
 
@@ -813,6 +878,9 @@ def _main():
     parser.add_option('--llvm-config', dest='action',
                       action='store_const',
                       const='llvmconfig', default='')
+    parser.add_option('--llvm-vesion', dest='action',
+                      action='store_const',
+                      const='llvmversion', default='')
     parser.add_option('--supported-versions', dest='action',
                       action='store_const',
                       const='llvmversions', default='')
@@ -831,6 +899,9 @@ def _main():
     elif options.action == 'llvmconfig':
         sys.stdout.write("{0}\n".format(llvm_config))
         validate_llvm_config()
+    elif options.action == 'llvmversion':
+        llvm_version = get_llvm_version()
+        sys.stdout.write("{0}\n".format(llvm_version))
     elif options.action == 'llvmversions':
         sys.stdout.write("{0}\n".format(llvm_versions))
     elif options.action == 'sdkroot':
