@@ -9,6 +9,7 @@ source $UTIL_CRON_DIR/common-quickstart.bash
 export HADOOP_HOME=/hpcdc/project/chapel/hadoop/$(hostname -s)
 export CLASSPATH=$(${HADOOP_HOME}/bin/hadoop classpath --glob)
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HADOOP_HOME/lib/native:$JAVA_HOME/lib:$JAVA_HOME/lib/amd64/server
+export LIBRARY_PATH=$LD_LIBRARY_PATH
 
 # remove storage directory root
 rm -rf /tmp/hadoop-$USER/
